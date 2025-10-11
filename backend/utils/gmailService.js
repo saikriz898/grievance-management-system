@@ -1,8 +1,8 @@
-const { google } = require('googleapis');
+const nodemailer = require('nodemailer');
 
 class GmailService {
   constructor() {
-    this.gmail = null;
+    this.transporter = null;
     this.initialized = false;
   }
 
@@ -10,79 +10,41 @@ class GmailService {
     if (this.initialized) return;
     
     try {
-      let credentials;
-      
-      // Try to get credentials from environment variable first
-      if (process.env.GOOGLE_CREDENTIALS) {
-        try {
-          // Clean and parse credentials
-          const credentialsString = process.env.GOOGLE_CREDENTIALS.trim();
-          credentials = JSON.parse(credentialsString);
-          
-          // Fix private key formatting
-          if (credentials.private_key) {
-            credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+      // Use SMTP instead of Gmail API to avoid decoder issues
+      if (process.env.GMAIL_USER && process.env.GMAIL_APP_PASSWORD) {
+        this.transporter = nodemailer.createTransporter({
+          service: 'gmail',
+          auth: {
+            user: process.env.GMAIL_USER,
+            pass: process.env.GMAIL_APP_PASSWORD
           }
-        } catch (e) {
-          console.log('Invalid GOOGLE_CREDENTIALS format:', e.message);
-        }
+        });
+        
+        // Test connection
+        await this.transporter.verify();
+        this.initialized = true;
+        console.log('✅ Gmail SMTP service initialized successfully');
+      } else {
+        console.log('⚠️ Gmail SMTP credentials not found - Email notifications disabled');
       }
-      
-      // Fallback to keyFile if env var not available
-      if (!credentials && process.env.GOOGLE_APPLICATION_CREDENTIALS) {
-        try {
-          credentials = require(process.env.GOOGLE_APPLICATION_CREDENTIALS);
-        } catch (e) {
-          console.log('Could not load credentials file');
-        }
-      }
-      
-      if (!credentials) {
-        console.log('Gmail credentials not found - Email notifications disabled');
-        return;
-      }
-
-      // Validate required credential fields
-      if (!credentials.private_key || !credentials.client_email) {
-        console.log('Invalid credentials: missing private_key or client_email');
-        return;
-      }
-
-      const auth = new google.auth.GoogleAuth({
-        credentials,
-        scopes: ['https://www.googleapis.com/auth/gmail.send']
-      });
-      
-      // Test authentication
-      const authClient = await auth.getClient();
-      
-      this.gmail = google.gmail({ version: 'v1', auth: authClient });
-      this.initialized = true;
-      console.log('✅ Gmail service initialized successfully');
     } catch (error) {
-      console.error('Gmail service initialization failed:', error.message);
+      console.error('Gmail SMTP service initialization failed:', error.message);
     }
   }
 
   async sendEmail(to, subject, body) {
     if (!this.initialized) await this.initialize();
-    if (!this.gmail) return false;
+    if (!this.transporter) return false;
 
     try {
-      const message = [
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        '',
-        body
-      ].join('\n');
-
-      const encodedMessage = Buffer.from(message).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-
-      await this.gmail.users.messages.send({
-        userId: 'me',
-        requestBody: { raw: encodedMessage }
+      await this.transporter.sendMail({
+        from: process.env.GMAIL_USER,
+        to: to,
+        subject: subject,
+        text: body
       });
 
+      console.log(`Email sent to ${to}: ${subject}`);
       return true;
     } catch (error) {
       console.error('Gmail send error:', error.message);
