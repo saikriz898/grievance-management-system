@@ -1,0 +1,10 @@
+backend/
+backend/node_modules/
+backend/.env
+backend/uploads/
+backend/testLogin.js
+backend/testPassword.js
+backend/resetAdmin.js
+backend/fixPhoneIndex.js
+*.log
+.DS_Store
