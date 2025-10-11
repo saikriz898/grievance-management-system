@@ -15,9 +15,16 @@ class GmailService {
       // Try to get credentials from environment variable first
       if (process.env.GOOGLE_CREDENTIALS) {
         try {
-          credentials = JSON.parse(process.env.GOOGLE_CREDENTIALS);
+          // Clean and parse credentials
+          const credentialsString = process.env.GOOGLE_CREDENTIALS.trim();
+          credentials = JSON.parse(credentialsString);
+          
+          // Fix private key formatting
+          if (credentials.private_key) {
+            credentials.private_key = credentials.private_key.replace(/\\n/g, '\n');
+          }
         } catch (e) {
-          console.log('Invalid GOOGLE_CREDENTIALS format');
+          console.log('Invalid GOOGLE_CREDENTIALS format:', e.message);
         }
       }
       
@@ -35,12 +42,21 @@ class GmailService {
         return;
       }
 
+      // Validate required credential fields
+      if (!credentials.private_key || !credentials.client_email) {
+        console.log('Invalid credentials: missing private_key or client_email');
+        return;
+      }
+
       const auth = new google.auth.GoogleAuth({
         credentials,
         scopes: ['https://www.googleapis.com/auth/gmail.send']
       });
       
-      this.gmail = google.gmail({ version: 'v1', auth });
+      // Test authentication
+      const authClient = await auth.getClient();
+      
+      this.gmail = google.gmail({ version: 'v1', auth: authClient });
       this.initialized = true;
       console.log('✅ Gmail service initialized successfully');
     } catch (error) {

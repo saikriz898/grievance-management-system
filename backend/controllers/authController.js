@@ -3,6 +3,7 @@ const { validationResult } = require('express-validator');
 const Logger = require('../utils/logger');
 const LoginMonitor = require('../utils/loginMonitor');
 const gmailService = require('../utils/gmailService');
+const emailService = require('../utils/emailService');
 
 const register = async (req, res) => {
   try {
@@ -37,7 +38,11 @@ const register = async (req, res) => {
     // Send registration welcome email
     try {
       if (user.email) {
-        await gmailService.sendRegistrationWelcome(user);
+        const gmailSent = await gmailService.sendRegistrationWelcome(user);
+        if (!gmailSent) {
+          // Fallback to SMTP email service
+          await emailService.sendRegistrationWelcome(user);
+        }
       }
     } catch (emailError) {
       console.log('Registration email notification failed:', emailError.message);
